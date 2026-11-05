@@ -1182,28 +1182,88 @@ function closeExperimentModal() {
   }
 }
 
+
 async function saveExperiment(e, mode, expId) {
   e.preventDefault();
+
+  const form = document.getElementById('exp-form');
+  const submitButton = form?.querySelector('[type="submit"]');
+
+  // 중복 제출 방지
+  if (form?.dataset.saving === 'true') return;
+  if (form) form.dataset.saving = 'true';
+
+  const originalButtonText = submitButton?.innerHTML;
+
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.innerHTML = `
+      <span class="inline-flex items-center gap-2">
+        <span class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+        저장 중...
+      </span>
+    `;
+  }
 
   const getValue = id => {
     const el = document.getElementById(id);
     return el ? el.value.trim() : '';
   };
 
-  const expData = {
-    id: mode === 'edit' ? expId : undefined,
-    title: getValue('form-exp-title'),
-    category: getValue('form-exp-category'),
-    status: getValue('form-exp-status'),
-    leadAuthorId: getValue('form-exp-author'),
-    startDate: getValue('form-exp-startdate'),
-    endDate: getValue('form-exp-enddate'),
-    description: getValue('form-exp-desc'),
-    hypothesis: getValue('form-exp-hypo'),
-    materials: getValue('form-exp-materials'),
-    method: getValue('form-exp-method'),
-    result: getValue('form-exp-result')
-  };
+  try {
+    const expData = {
+      id: mode === 'edit' ? expId : undefined,
+      title: getValue('form-exp-title'),
+      category: getValue('form-exp-category'),
+      status: getValue('form-exp-status'),
+      leadAuthorId: getValue('form-exp-author'),
+      startDate: getValue('form-exp-startdate'),
+      endDate: getValue('form-exp-enddate'),
+      description: getValue('form-exp-desc'),
+      hypothesis: getValue('form-exp-hypo'),
+      materials: getValue('form-exp-materials'),
+      method: getValue('form-exp-method'),
+      result: getValue('form-exp-result')
+    };
+
+    if (!expData.title) {
+      alert('실험 제목을 입력해 주세요.');
+      return;
+    }
+
+    const action = mode === 'create'
+      ? 'experiments/create'
+      : 'experiments/update';
+
+    const res = await API.post(action, expData);
+
+    if (res.success) {
+      alert(
+        mode === 'create'
+          ? '실험이 등록되었습니다.'
+          : '실험 정보가 수정되었습니다.'
+      );
+
+      closeExperimentModal();
+      await loadExperimentsList();
+
+    } else {
+      alert('저장 실패: ' + res.message);
+    }
+
+  } catch (err) {
+    console.error('[LABIT] 실험 저장 오류:', err);
+    alert('오류: ' + err.message);
+
+  } finally {
+    if (form) delete form.dataset.saving;
+
+    if (submitButton) {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalButtonText;
+    }
+  }
+}
 
   if (!expData.title) {
     alert('실험 제목을 입력해 주세요.');
