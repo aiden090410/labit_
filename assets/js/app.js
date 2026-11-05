@@ -1605,6 +1605,17 @@ async function openMaterialDetail(id) {
           ${m.relatedExperimentId ? `<p><b class="text-slate-500">연결 실험</b> <span class="text-slate-700">${materialEscape((experimentsDataCache.find(e=>String(e.id)===String(m.relatedExperimentId))||{}).title || '연결된 실험')}</span></p>` : ''}
           <p class="text-slate-400">등록자: ${materialEscape(m.authorName || '동아리원')}</p>
         </section>
+        <section class="border border-violet-100 bg-violet-50/50 rounded-xl p-4 space-y-3">
+          <div>
+            <h4 class="font-bold text-sm text-violet-900">Gemini AI 자료 분석</h4>
+            <p class="text-xs text-slate-500 mt-1">자료의 핵심 개념, 과학적 타당성 및 후속 탐구 주제를 분석합니다.</p>
+          </div>
+          <button id="material-ai-analyze-btn" type="button"
+            class="px-4 py-2.5 rounded-lg bg-violet-600 text-white text-xs font-bold hover:bg-violet-700">
+            ✦ AI 분석 시작
+          </button>
+          <div id="material-ai-analysis-result" class="hidden text-sm leading-relaxed text-slate-700 space-y-2"></div>
+        </section>
         <div class="flex flex-wrap gap-2">
           <button onclick="toggleMaterialFavorite('${materialEscape(m.id)}');document.getElementById('material-detail-modal')?.remove()" class="px-3 py-2 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold">${m.isFavorite ? '★ 즐겨찾기 해제' : '☆ 즐겨찾기'}</button>
           ${canEdit ? `<button onclick="document.getElementById('material-detail-modal').remove();openMaterialModal('${materialEscape(m.id)}')" class="px-3 py-2 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">수정</button><button onclick="archiveMaterial('${materialEscape(m.id)}')" class="px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-bold">보관</button>` : ''}
@@ -1622,8 +1633,78 @@ async function openMaterialDetail(id) {
       </div>
     </div>`;
   document.body.appendChild(modal);
+  modal.querySelector('#material-ai-analyze-btn').addEventListener('click', () => {
+    analyzeMaterialWithGemini(m.id);
+  });
   if (window.lucide) lucide.createIcons();
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+async function analyzeMaterialWithGemini(id) {
+  const button = document.getElementById('material-ai-analyze-btn');
+  const resultBox = document.getElementById('material-ai-analysis-result');
+
+  if (!button || !resultBox) return;
+
+  button.disabled = true;
+  button.innerHTML = '⏳ AI 분석 중...';
+  button.classList.add('opacity-60', 'cursor-not-allowed');
+
+  resultBox.classList.remove('hidden');
+  resultBox.innerHTML = `
+    <div class="flex items-center gap-2 py-4 text-violet-700">
+      <span class="animate-spin rounded-full h-4 w-4 border-2 border-violet-300 border-t-violet-700"></span>
+      자료를 분석하고 있습니다. 잠시 기다려 주세요.
+    </div>
+  `;
+
+  try {
+    const res = await API.post('materials/analyze', { id });
+
+    if (!res.success) {
+      throw new Error(res.message || 'AI 분석에 실패했습니다.');
+    }
+
+    const analysis = res.data.analysis || '';
+
+    if (!analysis.trim()) {
+      throw new Error('분석 결과가 비어 있습니다.');
+    }
+
+    resultBox.innerHTML = materialAIToHtml(analysis);
+
+  } catch (error) {
+    resultBox.innerHTML = `
+      <p class="text-red-600 text-sm">
+        분석 실패: ${materialEscape(error.message)}
+      </p>
+    `;
+  } finally {
+    button.disabled = false;
+    button.innerHTML = '✦ 다시 분석하기';
+    button.classList.remove('opacity-60', 'cursor-not-allowed');
+  }
+}
+
+function materialAIToHtml(markdown) {
+  return markdown.split('\n').map(line => {
+    let safe = materialEscape(line.trim());
+
+    if (!safe) return '<div class="h-1"></div>';
+
+    safe = safe
+      .replace(/^### (.+)$/, '<h5 class="font-bold text-violet-800 text-sm mt-3">$1</h5>')
+      .replace(/^## (.+)$/, '<h4 class="font-bold text-violet-900 text-base mt-4">$1</h4>')
+      .replace(/^# (.+)$/, '<h3 class="font-bold text-violet-950 text-lg mt-4">$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+    if (/^[-*] /.test(safe)) {
+      return `<p class="pl-3">• ${safe.slice(2)}</p>`;
+    }
+
+    return `<p>${safe}</p>`;
+  }).join('');
 }
 
 async function archiveMaterial(id) {
