@@ -1723,38 +1723,57 @@ function labitCloseForm() {
   window.LABIT.formSave = null;
 }
 
+
 async function labitSubmitForm(event) {
   event.preventDefault();
+
+  const form = event.target;
   const save = window.LABIT.formSave;
   if (!save) return;
 
-  const data = Object.fromEntries(new FormData(event.target).entries());
-  const button = event.target.querySelector('[type="submit"]');
-  if (button) button.disabled = true;
+  // 중복 제출 방지
+  if (form.dataset.saving === 'true') return;
+  form.dataset.saving = 'true';
+
+  const data = Object.fromEntries(new FormData(form).entries());
+  const button = form.querySelector('[type="submit"]');
+  const cancelButton = form.querySelector('[type="button"]');
+
+  const originalText = button ? button.innerHTML : '저장';
+
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = `
+      <span class="inline-flex items-center justify-center gap-2">
+        <span class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+        저장 중...
+      </span>
+    `;
+  }
+
+  if (cancelButton) cancelButton.disabled = true;
 
   try {
     await save(data);
+
   } catch (e) {
     alert(e.message || '저장 중 오류가 발생했습니다.');
-    if (button) button.disabled = false;
+
+  } finally {
+    delete form.dataset.saving;
+
+    // 모달이 닫히지 않은 경우에만 버튼 복구
+    if (button && button.isConnected) {
+      button.disabled = false;
+      button.innerHTML = originalText;
+    }
+
+    if (cancelButton && cancelButton.isConnected) {
+      cancelButton.disabled = false;
+    }
   }
 }
 
-function labitEmpty(message) {
-  return `<div class="text-center py-12 text-sm text-slate-400">${labitEscape(message)}</div>`;
-}
-
-function labitPageHeader(title, description, buttonText, onclick) {
-  return `
-    <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
-      <div>
-        <h2 class="text-xl font-bold text-labit-text">${title}</h2>
-        <p class="text-sm text-labit-subtext mt-1">${description}</p>
-      </div>
-      ${buttonText ? `<button onclick="${onclick}" class="px-4 py-2.5 rounded-xl bg-labit-primary text-white text-sm font-bold">${buttonText}</button>` : ''}
-    </div>
-  `;
-}
 
 
 // ==========================================
